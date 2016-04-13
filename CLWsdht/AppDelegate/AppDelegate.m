@@ -13,6 +13,7 @@
 #import "AddressGroupJSONModel.h"
 #import "AddressJSONModel.h"
 #import "MJYUtils.h"
+#import "MacroNotification.h"
 
 @interface AppDelegate ()<
 CLLocationManagerDelegate
@@ -20,6 +21,7 @@ CLLocationManagerDelegate
     
     CLLocationManager *locationManager;
     BMKMapManager* _mapManager;
+    NSMutableArray *cityInfoArr;//{经度、纬度、省、市、区}
 }
 
 @end
@@ -36,12 +38,9 @@ CLLocationManagerDelegate
     BaseTabBarController *tabVC = [[BaseTabBarController alloc] init];
     self.window.rootViewController = tabVC;
     [self.window makeKeyAndVisible];
-    
-    /**
-     * 初始化自身属性
-     */
-    [self initProperty];
-    
+    _endLocaltion=0;
+     [self initProperty];
+    cityInfoArr=[[NSMutableArray alloc]initWithCapacity:6];
     
     /**
      * 百度地图
@@ -57,7 +56,7 @@ CLLocationManagerDelegate
     
     [self loaction];
     
-    
+
     
     return YES;
 }
@@ -177,19 +176,10 @@ CLLocationManagerDelegate
     self.httpManager = [AFHTTPSessionManager manager];
     self.httpManager.responseSerializer = [AFHTTPResponseSerializer serializer];
     
-    self.currentCity = @"哈尔滨市";
-    self.currentCityID = @"5fd73a72-ca71-4e9a-a4c0-1238748ecf9e";
+    //self.currentCity = @"选择城市";
+    [self std_readCityInfo];
+    self.currentCityID = [self std_getCityId:self.currentCity];
     
-    NSMutableArray * maAddressInfos = [MJYUtils mjy_JSONAddressInfos];
-    for (AddressGroupJSONModel *groupModel in maAddressInfos) {
-        for (AddressJSONModel *address in groupModel.cities) {
-            if ([address.city_name isEqualToString:self.currentCity]) {
-                self.currentCityID = address.city_id;
-                self.currentCity = address.city_name;
-                break ;
-            }
-        }
-    }
     
 }
 
@@ -213,41 +203,116 @@ CLLocationManagerDelegate
     //此处locations存储了持续更新的位置坐标值，取最后一个值为最新位置，如果不想让其持续更新位置，则在此方法中获取到一个值之后让locationManager stopUpdatingLocation
     CLLocation *currentLocation = [locations lastObject];
     
-    _currentLong = [NSString stringWithFormat:@"%g",currentLocation.coordinate.longitude];
-    _currentLat = [NSString stringWithFormat:@"%g",currentLocation.coordinate.latitude];
+    NSString * longtmp = [NSString stringWithFormat:@"%g",currentLocation.coordinate.longitude];
+    NSString * latitudetmp = [NSString stringWithFormat:@"%g",currentLocation.coordinate.latitude];
+    cityInfoArr[0]=longtmp;
+    cityInfoArr[1]=latitudetmp;
     //获取当前所在的城市名
     CLGeocoder *geocoder = [[CLGeocoder alloc] init];
     //根据经纬度反向地理编译出地址信息
     [geocoder reverseGeocodeLocation:currentLocation completionHandler:^(NSArray *array, NSError *error) {
-        if (array.count >0) {
-            CLPlacemark *placemark = [array objectAtIndex:0];
-            //获取城市
-            NSString *city = placemark.locality;
-            NSLog(@"当前城市 = %@",city);
-            _currentCity = city;
-            NSString *province = placemark.administrativeArea;
-            _currentProvince = province;
-            
-            if (!city) {
-                //四大直辖市的城市信息无法通过locality获得，只能通过获取省份的方法来获得（如果city为空，则可知为直辖市）
-                city = placemark.administrativeArea;
+        if (_endLocaltion==0) {
+            if (array.count >0) {
+                CLPlacemark *placemark = [array objectAtIndex:0];
+                //获取城市
+                NSString *city = placemark.locality;
+                NSLog(@"当前城市 = %@",city);
+                _endLocaltion=1;
+                NSString *province = placemark.administrativeArea;
+                
+                
+                if (!city) {
+                    //四大直辖市的城市信息无法通过locality获得，只能通过获取省份的方法来获得（如果city为空，则可知为直辖市）
+                    city = placemark.administrativeArea;
+                }
+                [self std_readCityInfo];
+                if (![_currentCity isEqualToString:city]) {
+                    cityInfoArr[2]=province;
+                    cityInfoArr[3]=city;
+                    cityInfoArr[4]=placemark.subLocality;
+                    [[[UIAlertView alloc] initWithTitle:@"提示：" message:k_HintMessage_Local_AppDelegate delegate:self cancelButtonTitle:@"取消" otherButtonTitles:@"确定", nil] show];
+                    
+    
+                }
+            } else if (error ==nil && [array count] ==0) {
+                NSLog(@"No results were returned.");
+            } else if (error !=nil) {
+                NSLog(@"An error occurred = %@", error);
             }
-            
-            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-            [defaults setObject:placemark.subLocality forKey:@"area_country"];
-            [defaults setObject:city forKey:@"city"];
-            [defaults synchronize];
-            
-        } else if (error ==nil && [array count] ==0) {
-            NSLog(@"No results were returned.");
-        } else if (error !=nil) {
-            NSLog(@"An error occurred = %@", error);
         }
+        
     }];
+    
+    /**
+     * 初始化自身属性
+     */
+   
+    
+    
     //系统会一直更新数据，直到选择停止更新，因为我们只需要获得一次经纬度即可，所以获取之后就停止更新
     [manager stopUpdatingLocation];
 }
 
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex
+{
+    if (buttonIndex==1) {
+        if ([alertView.message isEqualToString:k_HintMessage_Local_AppDelegate]) {//更换城市为自动定位获得的
+            _currentLong= cityInfoArr[0];
+            _currentLat= cityInfoArr[1];
+            _currentProvince = cityInfoArr[2];
+            _currentCity=cityInfoArr[3];
+            [self std_setCityId:cityInfoArr[3]];//设置城市id
+            [self std_saveCityInfo:cityInfoArr[3] MySubLocality:cityInfoArr[4]];//保存city和区
+            [[NSNotificationCenter defaultCenter]postNotificationName:k_Notification_CityBtnName_Home object:nil];
+            [[NSNotificationCenter defaultCenter]postNotificationName:k_Notification_CityBtnName_Shop object:nil];
+        }
+    }
+    else if(buttonIndex==0)//定位失败，需要手动设置
+    {
+        if ([alertView.message isEqualToString:k_HintMessage_NoLocal_AppDelegate])
+                [[NSNotificationCenter defaultCenter]postNotificationName:k_Notification_CitySelect_Home object:nil];
+    }
+    
+
+}
+-(void)std_saveCityInfo:(NSString*)cityName MySubLocality:(NSString*)subStr{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:subStr forKey:@"area_country"];
+    [defaults setObject:cityName forKey:@"city"];
+    [defaults synchronize];
+}
+-(void)std_saveCityName:(NSString*)cityName{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:cityName forKey:@"city"];
+    [defaults synchronize];
+}
+
+-(void)std_readCityInfo{
+    NSUserDefaults *user = [NSUserDefaults standardUserDefaults];
+    _currentCity = [user objectForKey:@"city"];
+}
+-(void)std_setCityId:(NSString*)defaultCity{
+    if (defaultCity) {
+        self.currentCity=defaultCity;
+    }
+    else
+    {
+         [[[UIAlertView alloc] initWithTitle:@"提示：" message:k_HintMessage_NoLocal_AppDelegate delegate:self cancelButtonTitle:nil otherButtonTitles:@"确定", nil] show];
+        return;
+    }
+    self.currentCityID=[self std_getCityId:self.currentCity];
+}
+-(NSString*)std_getCityId:(NSString*)cityName{
+    NSMutableArray * maAddressInfos = [MJYUtils mjy_JSONAddressInfos];
+    for (AddressGroupJSONModel *groupModel in maAddressInfos) {
+        for (AddressJSONModel *address in groupModel.cities) {
+            if ([address.city_name isEqualToString:_currentCity]) {
+                return address.city_id;
+            }
+        }
+    }
+    return nil;
+}
 //检测是何种原因导致定位失败
 - (void)locationManager: (CLLocationManager *)manager
        didFailWithError: (NSError *)error {
@@ -263,9 +328,10 @@ CLLocationManagerDelegate
             [[[UIAlertView alloc] initWithTitle:@"提示：" message:@"请打开该app的位置服务!" delegate:nil cancelButtonTitle:nil otherButtonTitles:@"确定", nil] show];
             break;
         case kCLErrorLocationUnknown:
+            [self std_setCityId:nil];
             //Probably temporary...
-            errorString = @"Location data unavailable";
-            [[[UIAlertView alloc] initWithTitle:@"提示：" message:@"位置服务不可用!" delegate:nil cancelButtonTitle:nil otherButtonTitles:@"确定", nil] show];
+//            errorString = @"Location data unavailable";
+//            [[[UIAlertView alloc] initWithTitle:@"提示：" message:@"位置服务不可用!" delegate:nil cancelButtonTitle:nil otherButtonTitles:@"确定", nil] show];
             //Do something else...
             break;
         default:

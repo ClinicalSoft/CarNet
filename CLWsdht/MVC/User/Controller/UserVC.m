@@ -8,9 +8,12 @@
 
 #import "UserVC.h"
 #import "LoginViewController.h"//登陆页面
+#import <BaiduMapAPI_Map/BMKMapView.h>
 
-@interface UserVC ()
-
+@interface UserVC ()<BMKMapViewDelegate>
+{
+    BMKMapView* mapView;
+}
 @end
 
 @implementation UserVC
@@ -24,11 +27,15 @@
     [self initData];
     
     [self initUI];
+    mapView = [[BMKMapView alloc]initWithFrame:CGRectMake(0, 0, 320, 480)];
+    self.view = mapView;
 }
 
 -(void)viewWillAppear:(BOOL)animated
 {
     [super viewWillAppear:animated];
+    [mapView viewWillAppear];
+    mapView.delegate = self; // 此处记得不用的时候需要置nil，否则影响内存的释放
 }
 
 -(void)viewDidAppear:(BOOL)animated
@@ -39,6 +46,8 @@
 -(void)viewWillDisappear:(BOOL)animated
 {
     [super viewWillDisappear:animated];
+    [mapView viewWillDisappear];
+    mapView.delegate = nil; // 不用时，置nil
 }
 
 -(void)viewDidDisappear:(BOOL)animated

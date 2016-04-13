@@ -50,7 +50,36 @@
     [self initData];
     
     [self initUI];
-   
+    [self std_regsNotification];
+}
+
+- (void)execute:(NSNotification *)notification {
+         if([notification.name isEqualToString:k_Notification_CityBtnName_Home] ){
+             userSeletedCity=ApplicationDelegate.currentCity;
+             userSeletedCityID = ApplicationDelegate.currentCityID;
+             UIButton *btn = (UIButton *)self.navigationItem.rightBarButtonItem.customView;
+             [btn setTitle:userSeletedCity forState:UIControlStateNormal];
+             btn.titleLabel.text = userSeletedCity;
+
+            }
+}
+-(void)std_regsNotification{
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(execute:)
+                                                     name:k_Notification_CityBtnName_Home
+                                                   object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(selectCity:)
+                                                 name:k_Notification_CitySelect_Home
+                                               object:nil];
+}
+
+- (void)selectCity:(NSNotification *)notification {
+    if([notification.name isEqualToString:k_Notification_CitySelect_Home] ){
+        [self seleteCityAction];
+        
+    }
 }
 
 -(void)viewWillAppear:(BOOL)animated
@@ -58,8 +87,7 @@
     [super viewWillAppear:animated];
     
     //加载首页数据信息
-    
-    userSeletedCity = ApplicationDelegate.currentCity;
+    userSeletedCity=ApplicationDelegate.currentCity;
     userSeletedCityID = ApplicationDelegate.currentCityID;
     [self initRightButtonItemWithCityName:userSeletedCity];
     /*
@@ -110,6 +138,12 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:k_Notification_UpdateUserAddressInfo_Home
                                                   object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:k_Notification_CitySelect_Home
+                                                  object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:k_Notification_CityBtnName_Home
+                                                  object:nil];
 }
 
 #pragma mark - Data & UI
@@ -140,9 +174,12 @@
 - (void)updateUserSeletdCity:(NSNotification *) noti
 {
     AddressJSONModel *address = noti.object;
+    
     userSeletedCity = address.city_name;
     userSeletedCityID = address.city_id;
-    
+    ApplicationDelegate.currentCity=userSeletedCity;
+    ApplicationDelegate.currentCityID=userSeletedCityID;
+    [ApplicationDelegate std_saveCityName:userSeletedCity];
     UIButton *btn = (UIButton *)self.navigationItem.rightBarButtonItem.customView;
     [btn setTitle:userSeletedCity forState:UIControlStateNormal];
     btn.titleLabel.text = userSeletedCity;
