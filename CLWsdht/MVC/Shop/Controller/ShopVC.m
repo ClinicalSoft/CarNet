@@ -27,12 +27,13 @@
     UITableView *userStoreTableView;
     NSString *userSeletedCity;//用户选择的城市(默认用户当前位置所在城市)
     NSString *userSeletedCityID;//用户选择的城市ID(默认用户当前位置所在城市
-    NSArray *carSparePartsArray;//汽车配件
-    
+    NSMutableArray *carSparePartsArray;//汽车配件
+    int page;
+
     
 }
 
-@property (nonatomic, strong) NSMutableArray *modelArray;
+//@property (nonatomic, strong) NSMutableArray *modelArray;
 
 @end
 
@@ -42,30 +43,15 @@
 
 -(void)viewDidLoad
 {
-//    NSURL *url=[NSURL URLWithString:@"http://192.168.0.237:8787/UsrStore.asmx?op=GetPartsList"];
-//    NSMutableURLRequest *requeest=[NSMutableURLRequest requestWithURL:url];
-//    [requeest setHTTPMethod:@"post"];
-//    NSString *str1=@"start=0";
-//    NSString *str2=@"limit=10";
-//    
-//    [requeest setHTTPBody:[str1 dataUsingEncoding:NSUTF8StringEncoding]];
-//    [requeest setHTTPBody:[str2 dataUsingEncoding:NSUTF8StringEncoding]];
-//    NSURLSession *session=[NSURLSession sharedSession];
-//    NSURLSessionDataTask *task=[session dataTaskWithRequest:requeest completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-//        NSLog(@"data=%@",data);
-//    }];
-//    [task resume];
-    
-    _modelArray = [[NSMutableArray alloc] initWithCapacity:0];
     
     [super viewDidLoad];
-   
+    
     [self initData];
     
-    [self getMoreGoodsInfoFromNetwork];
- 
     [self initUI];
+
     [self std_regsNotification];
+
 }
 
 
@@ -80,7 +66,7 @@
 
 #pragma mark - Data & UI
 /**
- *   初始化右上角按钮
+ *   初始化左右按钮
  */
 - (void)initRightButtonItemWithCityName:(NSString *)cityName
 {
@@ -119,10 +105,12 @@
 //数据
 -(void)initData
 {
+    carSparePartsArray = [NSMutableArray array];
     imageArray=[[NSArray alloc]initWithObjects:@"index_gz_iconbj.png",@"index_zmdq_iconbj.png",@"index_dp_iconbj.png",@"index_bj_iconbj.png",@"index_bsx_iconbj.png",@"index_ns_iconbj.png",@"index_gz_iconbj.png",@"index_more_iconbj.png", nil];
     lableArray=[[NSArray alloc]initWithObjects:@"发动机",@"照明电器",@"底盘",@"钣金",@"变速箱",@"内饰",@"改装",@"更多", nil];
-//    [self getMoreGoodsInfoFromNetwork];
-    [self AddOrderByNetwork ];
+    
+    [MJYUtils mjy_hiddleExtendCellForTableView:userStoreTableView];
+    
 }
 
 //
@@ -168,18 +156,45 @@
 
     [self setHidesBottomBarWhenPushed:NO];
 }
-- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section{
-    return 1;
-}
+//- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section
+//{
+//    
+//    return userStoreTableView.mj_header;
+//}
 //返回某个section中rows的个数
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
-    return _modelArray.count;
+    return carSparePartsArray.count;
 }
 
 
 #pragma mark - Target & Action
 
 #pragma mark - Functions Custom
+
+/**
+ *  刷新
+ */
+- (void)loadFirstPage
+{
+    
+    page = 0 ;
+    [self getMoreGoodsInfoFromNetwork];
+    [userStoreTableView.mj_header endRefreshing];
+    
+}
+
+/**
+ *  加载下一页
+ */
+- (void)loadNextPage
+{
+    [userStoreTableView.mj_header beginRefreshing];
+
+    page ++ ;
+    [self getMoreGoodsInfoFromNetwork];
+    [userStoreTableView.mj_footer endRefreshing];
+    
+}
 
 #pragma mark - Networking
 /**
@@ -198,7 +213,7 @@
     NSDictionary *paramDict = @{
                                 @"partsJson":@"",
                                 @"sortJson":@"",
-                                @"start":[NSString stringWithFormat:@"%d",0],
+                                @"start":[NSString stringWithFormat:@"%d",page],
                                 @"limit":[NSString stringWithFormat:@"%d",30]
                                 };
   
@@ -206,19 +221,15 @@
                                parameters:paramDict
                                  progress:^(NSProgress * _Nonnull uploadProgress) {}
                                   success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-                                      //http请求状态
                                       if (task.state == NSURLSessionTaskStateCompleted) {
-                                          //            NSDictionary *jsonDic = [JYJSON dictionaryOrArrayWithJSONSData:responseObject];
                                           NSError* error;
                                           NSDictionary* jsonDic = [NSJSONSerialization
                                                                    JSONObjectWithData:responseObject
                                                                    options:kNilOptions
                                                                    error:&error];
-                                          //NSLog(@"1111111111111%@",jsonDic);
                                           PartsListData *data=[PartsListData mj_objectWithKeyValues:jsonDic];
-                                         // NSLog(@"2222222%@",data);
                                           if (data.Success) {
-                                              //成功
+                                              [carSparePartsArray removeAllObjects];
 
                                               for(PartsModal *modal in data.Data.Data)
                                               {
@@ -230,14 +241,12 @@
                                                   zm.storeName = modal.StoreName;
                                                   zm.partsSrcName = modal.PartsSrcName;
                                                   zm.purityName = modal.PurityName;
-                                                  [_modelArray addObject:zm];
+                                                  [carSparePartsArray addObject:zm];
                                               }
+                                              [SVProgressHUD dismiss];
                                               [userStoreTableView reloadData];
-                                              [SVProgressHUD showSuccessWithStatus:k_Success_Load];
-                                              NSLog(@"%@", _modelArray);
 
                                           } else {
-                                              //失败
                                               [SVProgressHUD showErrorWithStatus:k_Error_WebViewError];
                                               
                                           }
@@ -248,6 +257,7 @@
                                       
                                   } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
                                       //请求异常
+                                      NSLog(@"dfgdfg");
                                       [SVProgressHUD showErrorWithStatus:k_Error_Network];
                                   }];
     
@@ -293,12 +303,18 @@
         hotLable.backgroundColor=[UIColor colorWithRed:246/255.0 green:247/255.0 blue:242/255.0 alpha:1];
         hotLable.text=@"  热门推荐";
         [self.view addSubview:hotLable];
-        userStoreTableView=[[UITableView alloc]initWithFrame:CGRectMake(0, (25+(SCREEN_WIDTH-70)/4)+(5+20+(SCREEN_WIDTH-70)/4)+20+40, SCREEN_WIDTH, SCREEN_HEIGHT-((25+(SCREEN_WIDTH-70)/4)+(5+20+(SCREEN_WIDTH -70)/4)+20+40))];
+        userStoreTableView=[[UITableView alloc]initWithFrame:CGRectMake(0, (25+(SCREEN_WIDTH-70)/4)+(5+20+(SCREEN_WIDTH-70)/4)+20+40, SCREEN_WIDTH, SCREEN_HEIGHT-((25+(SCREEN_WIDTH-70)/4)+(5+20+(SCREEN_WIDTH -70)/4)+20+40)-110)];
         userStoreTableView.delegate=self;
         userStoreTableView.dataSource=self;
         [userStoreTableView registerNib:[UINib nibWithNibName:@"UsrStoreTableViewCell" bundle:nil] forCellReuseIdentifier:@"userStoreCellIdentifer"];
         [self.view addSubview:userStoreTableView];
+        
     }
+    userStoreTableView.mj_header = [MJRefreshNormalHeader headerWithRefreshingBlock:^{
+        [self loadFirstPage];
+        
+    }];
+    [userStoreTableView.mj_header beginRefreshing];
 }
 
 
@@ -312,7 +328,7 @@
     if (cell == nil) {
         cell = [[UsrStoreTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:userStoreCellIdentifer];
     }
-    [cell setDataWithModel:_modelArray[indexPath.row]];
+    [cell setDataWithModel:carSparePartsArray[indexPath.row]];
     
     return cell;
 }
